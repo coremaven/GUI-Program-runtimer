@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Script Timer Application
@@ -54,15 +55,14 @@ class ScriptTimer(QMainWindow):
 
         # Variables to store script info and timers
         self.script_path = ""
-        self.timer = QTimer()
+        self.close_timer = QTimer()
+        self.repeat_timer = QTimer()
         self.schedule_timer = QTimer()
         self.running_processes = []
+        self.current_mode = None  # Track which mode is active
 
         # Setup UI
         self.init_ui()
-
-        # Connect signals
-        self.timer.timeout.connect(self.check_processes)
 
     def init_ui(self):
         # Main widget and layout
@@ -181,11 +181,17 @@ class ScriptTimer(QMainWindow):
         interval = (
             self.close_time_spin.value() * 60000
         )  # Convert minutes to milliseconds
-        self.timer.start(interval)
+
+        # Connect to close_script method
+        self.close_timer.timeout.connect(self.close_script)
+        self.close_timer.setSingleShot(True)  # Only trigger once
+        self.close_timer.start(interval)
+
         self.close_button.setText("Stop Close Timer")
         self.close_button.clicked.disconnect()
         self.close_button.clicked.connect(self.stop_close_timer)
         self.stop_button.setEnabled(True)
+        self.current_mode = "close"
 
         # Run the script
         self.run_script()
@@ -194,11 +200,24 @@ class ScriptTimer(QMainWindow):
         )
 
     def stop_close_timer(self):
-        self.timer.stop()
+        self.close_timer.stop()
+        try:
+            self.close_timer.timeout.disconnect(self.close_script)
+        except:
+            pass
+        # Kill running processes
+        for process in self.running_processes:
+            try:
+                process.terminate()
+            except:
+                pass
+        self.running_processes.clear()
+
         self.close_button.setText("Start Close Timer")
         self.close_button.clicked.disconnect()
         self.close_button.clicked.connect(self.start_close_timer)
         self.stop_button.setEnabled(False)
+        self.current_mode = None
         self.status_label.setText("Close timer stopped")
 
     def start_repeat_timer(self):
@@ -209,24 +228,34 @@ class ScriptTimer(QMainWindow):
         interval = (
             self.repeat_time_spin.value() * 60000
         )  # Convert minutes to milliseconds
-        self.timer.start(interval)
+
+        # Connect to run_script method for repeating
+        self.repeat_timer.timeout.connect(self.run_script)
+        self.repeat_timer.start(interval)
+
         self.repeat_button.setText("Stop Repeat Timer")
         self.repeat_button.clicked.disconnect()
         self.repeat_button.clicked.connect(self.stop_repeat_timer)
         self.stop_button.setEnabled(True)
+        self.current_mode = "repeat"
 
-        # Run the script
+        # Run the script immediately
         self.run_script()
         self.status_label.setText(
             f"Script will repeat every {self.repeat_time_spin.value()} minutes"
         )
 
     def stop_repeat_timer(self):
-        self.timer.stop()
+        self.repeat_timer.stop()
+        try:
+            self.repeat_timer.timeout.disconnect(self.run_script)
+        except:
+            pass
         self.repeat_button.setText("Start Repeat Timer")
         self.repeat_button.clicked.disconnect()
         self.repeat_button.clicked.connect(self.start_repeat_timer)
         self.stop_button.setEnabled(False)
+        self.current_mode = None
         self.status_label.setText("Repeat timer stopped")
 
     def start_schedule_timer(self):
@@ -251,6 +280,7 @@ class ScriptTimer(QMainWindow):
         self.schedule_button.clicked.disconnect()
         self.schedule_button.clicked.connect(self.stop_schedule_timer)
         self.stop_button.setEnabled(True)
+        self.current_mode = "schedule"
 
         if self.schedule_checkbox.isChecked():
             self.schedule_timer.timeout.connect(self.run_scheduled_script)
@@ -265,10 +295,15 @@ class ScriptTimer(QMainWindow):
 
     def stop_schedule_timer(self):
         self.schedule_timer.stop()
+        try:
+            self.schedule_timer.timeout.disconnect(self.run_scheduled_script)
+        except:
+            pass
         self.schedule_button.setText("Start Schedule Timer")
         self.schedule_button.clicked.disconnect()
         self.schedule_button.clicked.connect(self.start_schedule_timer)
         self.stop_button.setEnabled(False)
+        self.current_mode = None
         self.status_label.setText("Schedule timer stopped")
 
     def run_script(self):
@@ -291,12 +326,35 @@ class ScriptTimer(QMainWindow):
         except Exception as e:
             self.status_label.setText(f"Error running scheduled script: {str(e)}")
 
+    def close_script(self):
+        # Terminate all running processes
+        for process in self.running_processes:
+            try:
+                process.terminate()
+                self.status_label.setText(
+                    f"Script closed after {self.close_time_spin.value()} minutes"
+                )
+            except Exception as e:
+                self.status_label.setText(f"Error closing script: {str(e)}")
+        self.running_processes.clear()
+
+        # Reset the close timer button
+        self.close_timer.stop()
+        try:
+            self.close_timer.timeout.disconnect(self.close_script)
+        except:
+            pass
+        self.close_button.setText("Start Close Timer")
+        self.close_button.clicked.disconnect()
+        self.close_button.clicked.connect(self.start_close_timer)
+        self.stop_button.setEnabled(False)
+        self.current_mode = None
+
     def check_processes(self):
-        # Check if any processes have finished
+        # Check if any processes have finished (optional monitoring)
         for process in self.running_processes[:]:
             if process.poll() is not None:  # Process has finished
                 self.running_processes.remove(process)
-                self.status_label.setText("Script completed execution")
 
     def stop_all(self):
         # Kill all running processes
@@ -308,8 +366,23 @@ class ScriptTimer(QMainWindow):
         self.running_processes.clear()
 
         # Stop all timers
-        self.timer.stop()
+        self.close_timer.stop()
+        self.repeat_timer.stop()
         self.schedule_timer.stop()
+
+        # Disconnect all timer signals
+        try:
+            self.close_timer.timeout.disconnect(self.close_script)
+        except:
+            pass
+        try:
+            self.repeat_timer.timeout.disconnect(self.run_script)
+        except:
+            pass
+        try:
+            self.schedule_timer.timeout.disconnect(self.run_scheduled_script)
+        except:
+            pass
 
         # Reset buttons
         self.close_button.setText("Start Close Timer")
@@ -325,6 +398,7 @@ class ScriptTimer(QMainWindow):
         self.schedule_button.clicked.connect(self.start_schedule_timer)
 
         self.stop_button.setEnabled(False)
+        self.current_mode = None
         self.status_label.setText("All timers stopped")
 
 
