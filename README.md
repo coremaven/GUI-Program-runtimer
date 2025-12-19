@@ -1,6 +1,6 @@
 # Script Timer Application
 
-A tool to control script/program execution with timer functionality.
+A tool to control script/program execution with timer functionality. MAde with Qwe3 30B-a3B + OpenCode.
 
 <img width="500" height="572" alt="Screenshot" src="https://github.com/user-attachments/assets/4d3b3b50-e651-47d6-947c-0018d8b9693a" />
 
